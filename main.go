@@ -24,14 +24,13 @@ type Callback struct {
 }
 
 type Message struct {
-	MID        string `json:"mid,omitempty"`
-	Text       string `json:"text,omitempty"`
-	QuickReply *struct {
-		Payload string `json:"payload,omitempty"`
-	} `json:"quick_reply,omitempty"`
+	MID         string        `json:"mid,omitempty"`
+	Text        string        `json:"text,omitempty"`
 	Attachments *[]Attachment `json:"attachments,omitempty"`
 	Attachment  *Attachment   `json:"attachment,omitempty"`
 }
+
+type Payload map[string]interface{}
 
 type Attachment struct {
 	Type    string  `json:"type,omitempty"`
@@ -49,19 +48,19 @@ type Postback struct {
 }
 
 type Event struct {
-	Sender    User     `json:"sender,omitempty"`
-	Recipient User     `json:"recipient,omitempty"`
-	Timestamp int      `json:"timestamp,omitempty"`
-	Message   Message  `json:"message,omitempty"`
-	Postback  Postback `json:"postback,omitempty"`
+	Sender    User      `json:"sender,omitempty"`
+	Recipient User      `json:"recipient,omitempty"`
+	Timestamp int       `json:"timestamp,omitempty"`
+	Message   *Message  `json:"message,omitempty"`
+	Postback  *Postback `json:"postback,omitempty"`
 }
 
 func (e Event) IsMessage() bool {
-	return e.Message.MID != ""
+	return e.Message != nil
 }
 
 func (e Event) IsPostback() bool {
-	return e.Postback.Payload != ""
+	return e.Postback != nil
 }
 
 type User struct {
@@ -71,10 +70,6 @@ type User struct {
 type Response struct {
 	Recipient User    `json:"recipient,omitempty"`
 	Message   Message `json:"message,omitempty"`
-}
-
-type Payload struct {
-	URL string `json:"url,omitempty"`
 }
 
 func VerificationHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +89,7 @@ func VerificationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func SendMessage(id string, m Message) {
+func SendMessage(id string, m Message) (*MessageResponse, error) {
 	client := &http.Client{}
 	response := Response{
 		Recipient: User{
@@ -112,11 +107,18 @@ func SendMessage(id string, m Message) {
 		log.Fatal(err)
 	}
 
-	resp, err := client.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	defer resp.Body.Close()
+
+	resp := MessageResponse{}
+	defer res.Body.Close()
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
 }
 
 func contains(s string, subs ...string) bool {
@@ -129,43 +131,106 @@ func contains(s string, subs ...string) bool {
 	return false
 }
 
-var counter = 0
+type MessageResponse struct {
+	RecipientID  string `json:"recipient_id"`
+	MessageID    string `json:"message_id"`
+	AttachmentID string `json:"attachment_id,omitempty"`
+}
 
-func ProcessMessage(event Event) {
-	images := []string{
+type M map[string]interface{}
+
+var (
+	counter  int
+	owner    string
+	imageIDs []string
+	images   = []string{
 		"https://pics.me.me/i-could-spat-gopher-a-beer-funny-c3-15199885.png",
 		"https://i.pinimg.com/originals/b5/ac/dd/b5acdd83bb12c464bf9d28e107a8fec6.jpg",
 		"https://www.memerewards.com/images/2017/12/20/Its__GOPHER_TIME_1513822263b5b3e402ab1a9650.png",
 		"https://pics.me.me/vampire-gopher-strikes-again-34149257.png",
 	}
+	me string
+)
 
-	if contains(event.Message.Text, "gopher", "go", "golang") {
-		SendMessage(event.Sender.ID, Message{
-			Text: "Cool! Here's a gopher for you:",
-		})
+func sendGopher(id string) {
+	SendMessage(id, Message{
+		Text: "Cool! Here's a gopher for you:",
+	})
 
-		SendMessage(event.Sender.ID, Message{
-			Attachment: &Attachment{
-				Type: "image",
-				Payload: Payload{
-					URL: images[counter],
+	SendMessage(id, Message{
+		Attachment: &Attachment{
+			Type: "template",
+			Payload: Payload{
+				"template_type": "media",
+				"elements": []M{
+					M{
+						"media_type":    "image",
+						"attachment_id": imageIDs[counter],
+						"buttons": []M{
+							M{
+								"type":  "web_url",
+								"title": "Website",
+								"url":   "http://golang.org",
+							},
+							M{
+								"type":    "postback",
+								"title":   "I can go-pher more",
+								"payload": "_GOPHER",
+							},
+						},
+					},
 				},
 			},
+		},
+	})
+	counter = (counter + 1) % len(images)
+}
+
+func ProcessMessage(event Event) {
+	if event.Message.Text == "_INIT" {
+		if owner != "" {
+			return
+		}
+
+		owner = event.Sender.ID
+		for _, image := range images {
+			resp, err := SendMessage(owner, Message{
+				Attachment: &Attachment{
+					Type: "image",
+					Payload: Payload{
+						"url":         image,
+						"is_reusable": true,
+					},
+				},
+			})
+
+			if err != nil {
+				log.Printf("init error: %v", err)
+				continue
+			}
+
+			imageIDs = append(imageIDs, resp.AttachmentID)
+		}
+		SendMessage(event.Sender.ID, Message{
+			Text: fmt.Sprintf("The bot is initialized, attachment IDs are: %v", imageIDs),
 		})
 
-		counter = (counter + 1) % len(images)
-	} else if contains(event.Message.Text, "python") {
+	} else if contains(event.Message.Text, "gopher", "go", "golang") && owner != "" {
+		sendGopher(event.Sender.ID)
+	} else if contains(event.Message.Text, "python") && owner != "" {
 		SendMessage(event.Sender.ID, Message{
 			Text: "Go away, you evil person",
 		})
-	} else if contains(event.Message.Text, "java") {
+	} else if contains(event.Message.Text, "java") && owner != "" {
 		SendMessage(event.Sender.ID, Message{
 			Text: "I don't mind coding in Java, as long as it's the island in Indonesia",
 		})
+	} else {
+		SendMessage(event.Sender.ID, Message{
+			Text: "This bot isn't initialized",
+		})
 	}
 }
-
-var me string
 
 func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 	var callback Callback
@@ -188,6 +253,9 @@ func CallbackHandler(w http.ResponseWriter, r *http.Request) {
 					ProcessMessage(event)
 				} else if event.IsPostback() && me != "" && event.Sender.ID != me {
 					log.Printf("Postback event of sender ID: %v: %v", event.Sender.ID, event.Postback)
+					if event.Postback.Payload == "_GOPHER" {
+						sendGopher(event.Sender.ID)
+					}
 				}
 			}
 		}
