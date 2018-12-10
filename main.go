@@ -140,14 +140,18 @@ type MessageResponse struct {
 type M map[string]interface{}
 
 var (
-	counter  int
-	owner    string
-	imageIDs []string
-	images   = []string{
-		"https://pics.me.me/i-could-spat-gopher-a-beer-funny-c3-15199885.png",
-		"https://i.pinimg.com/originals/b5/ac/dd/b5acdd83bb12c464bf9d28e107a8fec6.jpg",
-		"https://www.memerewards.com/images/2017/12/20/Its__GOPHER_TIME_1513822263b5b3e402ab1a9650.png",
-		"https://pics.me.me/vampire-gopher-strikes-again-34149257.png",
+	counter int
+	owner   string
+	// imageIDs []string
+	images = []string{
+		// "https://pics.me.me/i-could-spat-gopher-a-beer-funny-c3-15199885.png",
+		// "https://i.pinimg.com/originals/b5/ac/dd/b5acdd83bb12c464bf9d28e107a8fec6.jpg",
+		// "https://www.memerewards.com/images/2017/12/20/Its__GOPHER_TIME_1513822263b5b3e402ab1a9650.png",
+		// "https://pics.me.me/vampire-gopher-strikes-again-34149257.png",
+		"https://business.facebook.com/331396180739266/photos/a.361318144413736/361318161080401",
+		"https://business.facebook.com/331396180739266/photos/a.361318144413736/361318187747065",
+		"https://business.facebook.com/331396180739266/photos/a.361318144413736/361318154413735",
+		"https://business.facebook.com/331396180739266/photos/a.361318144413736/361318167747067",
 	}
 	me string
 )
@@ -164,8 +168,9 @@ func sendGopher(id string) {
 				"template_type": "media",
 				"elements": []M{
 					M{
-						"media_type":    "image",
-						"attachment_id": imageIDs[counter],
+						"media_type": "image",
+						//"attachment_id": imageIDs[counter],
+						"url": images[counter],
 						"buttons": []M{
 							M{
 								"type":  "web_url",
@@ -193,26 +198,26 @@ func ProcessMessage(event Event) {
 		}
 
 		owner = event.Sender.ID
-		for _, image := range images {
-			resp, err := SendMessage(owner, Message{
-				Attachment: &Attachment{
-					Type: "image",
-					Payload: Payload{
-						"url":         image,
-						"is_reusable": true,
-					},
-				},
-			})
+		// for _, image := range images {
+		// 	resp, err := SendMessage(owner, Message{
+		// 		Attachment: &Attachment{
+		// 			Type: "image",
+		// 			Payload: Payload{
+		// 				"url":         image,
+		// 				"is_reusable": true,
+		// 			},
+		// 		},
+		// 	})
 
-			if err != nil {
-				log.Printf("init error: %v", err)
-				continue
-			}
+		// 	if err != nil {
+		// 		log.Printf("init error: %v", err)
+		// 		continue
+		// 	}
 
-			imageIDs = append(imageIDs, resp.AttachmentID)
-		}
+		// 	imageIDs = append(imageIDs, resp.AttachmentID)
+		// }
 		SendMessage(event.Sender.ID, Message{
-			Text: fmt.Sprintf("The bot is initialized, attachment IDs are: %v", imageIDs),
+			Text: fmt.Sprintf("The bot is initialized"),
 		})
 
 	} else if contains(event.Message.Text, "gopher", "go", "golang") && owner != "" {
@@ -271,7 +276,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/webhook", VerificationHandler).Methods("GET")
 	r.HandleFunc("/webhook", CallbackHandler).Methods("POST")
-	if err := http.ListenAndServe("0.0.0.0:8080", r); err != nil {
+	if err := http.ListenAndServe(":8080", r); err != nil {
 		log.Fatal(err)
 	}
 }
