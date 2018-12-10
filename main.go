@@ -198,24 +198,6 @@ func ProcessMessage(event Event) {
 		}
 
 		owner = event.Sender.ID
-		// for _, image := range images {
-		// 	resp, err := SendMessage(owner, Message{
-		// 		Attachment: &Attachment{
-		// 			Type: "image",
-		// 			Payload: Payload{
-		// 				"url":         image,
-		// 				"is_reusable": true,
-		// 			},
-		// 		},
-		// 	})
-
-		// 	if err != nil {
-		// 		log.Printf("init error: %v", err)
-		// 		continue
-		// 	}
-
-		// 	imageIDs = append(imageIDs, resp.AttachmentID)
-		// }
 		SendMessage(event.Sender.ID, Message{
 			Text: fmt.Sprintf("The bot is initialized"),
 		})
